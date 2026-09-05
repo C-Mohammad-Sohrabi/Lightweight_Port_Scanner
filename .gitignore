@@ -1,0 +1,21 @@
+# Build artifacts
+build/
+embed/
+*.o
+*.a
+*.elf
+*.bin
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+core
+*.core
