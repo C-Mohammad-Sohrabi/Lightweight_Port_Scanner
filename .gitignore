@@ -19,3 +19,7 @@ Thumbs.db
 # Debug
 core
 *.core
+
+# tooling / local workspace
+.freebuff/
+create_liscan.py
