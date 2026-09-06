@@ -5,6 +5,7 @@ embed/
 *.a
 *.elf
 *.bin
+*.plist
 
 # IDE
 .vscode/
@@ -17,9 +18,11 @@ embed/
 Thumbs.db
 
 # Debug
-core
+# A file named "core" at the repository root is commonly a crash dump.  Keep
+# this anchored so the source directory src/core/ remains versioned.
+/core
 *.core
 
 # tooling / local workspace
 .freebuff/
-create_liscan.py
+__pycache__/

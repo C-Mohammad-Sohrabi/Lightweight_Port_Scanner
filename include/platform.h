@@ -22,7 +22,18 @@ extern "C" {
 #endif
 
 /* Parse a dotted-quad IPv4 string.
- * Returns 0 on failure, network-byte-order IP on success.
+ *
+ * The checked form returns 0 on success and a negative errno-style value on
+ * failure.  It writes the address in network byte order to `out`; therefore
+ * 0.0.0.0 is a valid address and is distinguishable from malformed input.
+ */
+int      platform_parse_ipv4_checked(const char *str, uint32_t *out);
+/* Alias kept for ports that use the `_ex` spelling. */
+int      platform_parse_ipv4_ex(const char *str, uint32_t *out);
+
+/* Legacy form.  It returns a network-byte-order address, or 0 on failure.
+ * Because 0.0.0.0 also encodes as zero, new callers should use one of the
+ * checked forms above.
  */
 uint32_t platform_parse_ipv4(const char *str);
 

@@ -26,13 +26,6 @@
 extern "C" {
 #endif
 
-/* Result record – defined first so it can be used by the API prototypes */
-typedef struct {
-    uint16_t port;   /* port in host byte order */
-    bool     open;
-    int      result; /* extra status: protocol response code or error */
-} scan_result_t;
-
 /* Scan modes – pick the lightest that works on the target platform */
 typedef enum {
     SCAN_MODE_CONNECT = 0,   /* plain TCP connect() – universal, no root */
@@ -40,6 +33,37 @@ typedef enum {
     SCAN_MODE_UDP,           /* UDP probe – noisy, best for selected ports */
     SCAN_MODE_ICMP_PING,     /* host discovery only */
 } scan_mode_t;
+
+/* Result record.
+ *
+ * The original fields remain first for source-level compatibility.  This is
+ * not a stable binary ABI.  The additional target/mode fields make results
+ * from multi-target scans unambiguous without requiring the caller to keep a
+ * parallel work list.
+ * `target_ip` is in network byte order and `target` is a NUL-terminated
+ * dotted-quad string (when the record was produced by libscan).
+ */
+typedef struct {
+    uint16_t    port;       /* port in host byte order */
+    bool        open;
+    int         result;     /* platform status/response code or error */
+    uint32_t    target_ip;  /* target IPv4 address, network byte order */
+    char        target[16]; /* target IPv4 dotted-quad string */
+    scan_mode_t mode;       /* scan technique/protocol used */
+} scan_result_t;
+
+/* Common return codes.  A successful call returns LIBSCAN_OK. */
+#define LIBSCAN_OK                    0
+#define LIBSCAN_ERR_INVALID_ARGUMENT -1
+#define LIBSCAN_ERR_NOT_INITIALIZED  -2
+#define LIBSCAN_ERR_NOT_CONFIGURED   -3
+#define LIBSCAN_ERR_RESULT_OVERFLOW  -4
+#define LIBSCAN_ERR_PENDING_RESULTS  -5
+
+/* Fixed storage limits of the default core implementation. */
+#define LIBSCAN_MAX_TARGETS          64
+#define LIBSCAN_MAX_PORTS            1024
+#define LIBSCAN_RESULT_CAPACITY      2048
 
 /* Callback signature for progress reporting */
 typedef void (*libscan_progress_fn)(int completed, int total, void *ctx);
@@ -59,13 +83,17 @@ int  libscan_set_mode(scan_mode_t mode);
 /* Optional progress callback */
 void libscan_set_progress_callback(libscan_progress_fn cb, void *ctx);
 
-/* Run the scan (blocking). Returns 0 on success. */
+/* Run the scan (blocking). Results from a prior run must be drained with
+ * libscan_results() or discarded with libscan_reset_results() first.  A batch
+ * larger than LIBSCAN_RESULT_CAPACITY is rejected before network I/O. */
 int libscan_run(void);
 
-/* Drain results. Returns number of results written to `out`. */
+/* Drain results. Returns number of results written to `out` and removes those
+ * records from the internal queue.  A return value of zero means the queue is
+ * empty; a negative value is an invalid argument/not-initialized error. */
 int  libscan_results(scan_result_t *out, int max_out);
 
-/* Clear result buffer after draining */
+/* Discard all queued results without copying them out. */
 void libscan_reset_results(void);
 
 /* Lightweight info helpers */
