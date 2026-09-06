@@ -1,52 +1,69 @@
-# Makefile – minimal portable build for host testing
-# On embedded targets you normally replace this with your own toolchain make.
+# Makefile – portable host build.  Embedded integrations can compile the
+# library sources with their own toolchain instead of building the CLI.
 
-CC      ?= gcc
-CFLAGS  ?= -Wall -Wextra -O2 -std=c11
-LDFLAGS ?=
+CC       ?= cc
+AR       ?= ar
+CPPFLAGS ?= -Iinclude
+CFLAGS   ?= -std=c11 -Wall -Wextra -Wpedantic -O2
+LDFLAGS  ?=
+LDLIBS   ?=
 
-PREFIX  ?= ./build
-OBJDIR  := $(PREFIX)/obj
-BINDIR  := $(PREFIX)/bin
-
-$(shell mkdir -p $(OBJDIR)/src/core $(OBJDIR)/src/cli $(OBJDIR)/src/platform $(OBJDIR)/examples)
+PREFIX ?= build
+OBJDIR := $(PREFIX)/obj
+BINDIR := $(PREFIX)/bin
+LIBDIR := $(PREFIX)/lib
+LIB    := $(LIBDIR)/libscan.a
 
 SRCS_LIB := src/core/libscan_core.c src/platform/platform.c
 OBJS_LIB := $(patsubst %.c,$(OBJDIR)/%.o,$(SRCS_LIB))
 
-CLI_SRC  := src/cli/cli.c
-CLI_OBJ  := $(OBJDIR)/src/cli/cli.o
-
+CLI_SRC     := src/cli/cli.c
+CLI_OBJ     := $(OBJDIR)/src/cli/cli.o
 EXAMPLE_SRC := examples/example.c
 EXAMPLE_OBJ := $(OBJDIR)/examples/example.o
+CORE_TEST   := $(BINDIR)/libscan_core_api_test
+PLATFORM_TEST := $(BINDIR)/libscan_platform_test
 
-INC      := -I include
+DEPS := $(OBJS_LIB:.o=.d) $(CLI_OBJ:.o=.d) $(EXAMPLE_OBJ:.o=.d)
 
-.PHONY: all clean cli example
+.PHONY: all clean cli example library test
 
-all: $(PREFIX)/lib/libscan.a $(BINDIR)/libscan_cli
+all: library cli example
 
-$(OBJDIR)/%.o: %.c | $(OBJDIR)/$(dir $@)
-	$(CC) $(CFLAGS) $(INC) -c $< -o $@
-
-$(PREFIX)/lib/libscan.a: $(OBJS_LIB) | $(PREFIX)/lib
-	ar rcs $@ $(OBJS_LIB)
-
-$(BINDIR)/libscan_cli: $(CLI_OBJ) $(PREFIX)/lib/libscan.a | $(BINDIR)
-	$(CC) $(CFLAGS) $(CLI_OBJ) -L $(PREFIX)/lib -lscan -o $@ $(LDFLAGS)
-
-$(BINDIR)/example: $(EXAMPLE_OBJ) $(PREFIX)/lib/libscan.a | $(BINDIR)
-	$(CC) $(CFLAGS) $(EXAMPLE_OBJ) -L $(PREFIX)/lib -lscan -o $@ $(LDFLAGS)
-
-$(OBJDIR) $(PREFIX)/lib $(BINDIR):
-	mkdir -p $@
-
-$(OBJDIR)/src/core $(OBJDIR)/src/cli $(OBJDIR)/src/platform $(OBJDIR)/examples:
-	mkdir -p $@
-
+library: $(LIB)
 cli: $(BINDIR)/libscan_cli
-
 example: $(BINDIR)/example
+test: $(CORE_TEST) $(PLATFORM_TEST)
+	$(CORE_TEST)
+	$(PLATFORM_TEST)
+
+$(OBJDIR)/%.o: %.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(LIB): $(OBJS_LIB)
+	@mkdir -p $(@D)
+	$(AR) rcs $@ $^
+
+$(BINDIR)/libscan_cli: $(CLI_OBJ) $(LIB)
+	@mkdir -p $(@D)
+	$(CC) $(LDFLAGS) -o $@ $(CLI_OBJ) $(LIB) $(LDLIBS)
+
+$(BINDIR)/example: $(EXAMPLE_OBJ) $(LIB)
+	@mkdir -p $(@D)
+	$(CC) $(LDFLAGS) -o $@ $(EXAMPLE_OBJ) $(LIB) $(LDLIBS)
+
+$(CORE_TEST): src/core/libscan_core.c tests/core_api_test.c include/libscan.h include/platform.h
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ \
+		src/core/libscan_core.c tests/core_api_test.c $(LDLIBS)
+
+$(PLATFORM_TEST): src/platform/platform.c tests/platform_test.c include/libscan.h include/platform.h
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ \
+		src/platform/platform.c tests/platform_test.c $(LDLIBS)
 
 clean:
-	rm -rf $(PREFIX)
+	$(RM) -r $(PREFIX)
+
+-include $(DEPS)
